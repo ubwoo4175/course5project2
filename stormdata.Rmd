@@ -1,0 +1,175 @@
+---
+title: "storm data"
+author: "Rick Yoo"
+date: '2020/1/27 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# <Top 10 Weather events 'most harmful to population health' & 'with greatest economic consequences'>
+### Introduction
+Given a set of storm data, the purpose of this research is to answer these two questions - 1) "Which types of events are most harmful to population health?" and 2) "Which types of events have the greatest economic consequences?" - in a way that is reproducible by anyone. 
+
+# library & sessionInfo
+- load necessary libraries
+```{r}
+suppressPackageStartupMessages({
+library(R.utils)
+library(data.table)
+library(ggplot2)
+library(dplyr)
+library(cowplot)
+})
+sessionInfo()
+```
+
+# Data processing
+ - unzip & fread
+```{r cache=TRUE}
+fileName <- "repdata%2Fdata%2FStormData.csv.bz2"
+if (!fileName %in% list.files()) {
+    fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+    download.file(fileUrl, fileName)
+    bunzip2(filename = fileName, remove = FALSE)
+}
+# data read
+DF <- fread(gsub(".bz2", "", fileName))
+```
+
+### Question 1. Across the United States, which types of events (as indicated in the \color{red}{\verb|EVTYPE|}EVTYPE variable) are most harmful with respect to population health?
+ - select a few variables that are related to population health
+ - group by event type
+ - calculate sum of 'fatalities', 'injuries' for each event type
+```{r}
+PopHealth <- DF %>% 
+    # select population health - related variables
+    select(EVTYPE, FATALITIES, INJURIES)%>%
+    # group by event type 
+    group_by(EVTYPE) %>% 
+    # sum of Fatalities & Injuries for each event type
+    summarise(
+    	totalF = sum(FATALITIES), 
+    	totalI = sum(INJURIES)
+    	)
+```
+ - sort by total fatalities & select top 10
+ - create a bar plot and assign it to `plotFat`
+```{r}
+## by Fatalities
+Fat <- PopHealth %>%
+    arrange(-totalF) %>%
+    head(10)
+plotFat <- ggplot(data = Fat) +
+	geom_bar(mapping = aes(x = reorder(EVTYPE, -totalF), y = totalF), 
+	         fill = 'red', stat = 'identity') +
+    labs(title = 'Fatalities - Top 10', 
+         x = 'Event Type',
+         y = 'Fatalities Count') +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+ - sort by total injuries & select top 10
+ - create a bar plot and assign it to `plotInj`
+```{r}
+## by Injuries
+Inj <- PopHealth %>%
+    arrange(-totalI) %>%
+    head(10)
+plotInj <- ggplot(data = Inj) +
+	geom_bar(mapping = aes(x = reorder(EVTYPE, -totalI), y = totalI), 
+	         stat = 'identity', fill = 'blue') +
+    labs(title = 'Injuries - Top 10', 
+         x = 'Event Type',
+         y = 'Injuries Count') +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+ - show two barplots in one figure using `plot_grid()` (from the cowplot library)
+```{r}
+# plot into one
+theme_set(theme_bw())
+plot_grid(plotFat, plotInj, labels='AUTO')
+```
+
+### Question 2. Across the United States, which types of events have the greatest economic consequences?
+ - select a few variables that are related to economic consequences
+ - multiply `PROPDMG` by appropriate scale indicated in `PROPDMGEXP`
+ - group by event type
+ - calculate sum of 'property damage', 'crop damage' for each event type
+```{r}
+Eco <- DF %>% 
+    # select economic consequence - related variables
+    select(EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP) %>%
+    mutate(
+        PROPDMG = case_when(
+            PROPDMGEXP == 'h' | PROPDMGEXP == 'H' ~ PROPDMG * 100,
+            PROPDMGEXP == 'k' | PROPDMGEXP == 'K' ~ PROPDMG * 1000,
+            PROPDMGEXP == 'm' | PROPDMGEXP == 'M' ~ PROPDMG * 1000000,
+            PROPDMGEXP == 'b' | PROPDMGEXP == 'B' ~ PROPDMG * 1000000000,
+            TRUE ~ PROPDMG
+        ), 
+        CROPDMG = case_when(
+            CROPDMGEXP == 'h' | CROPDMGEXP == 'H' ~ CROPDMG * 100,
+            CROPDMGEXP == 'k' | CROPDMGEXP == 'K' ~ CROPDMG * 1000,
+            CROPDMGEXP == 'm' | CROPDMGEXP == 'M' ~ CROPDMG * 1000000,
+            CROPDMGEXP == 'b' | CROPDMGEXP == 'B' ~ CROPDMG * 1000000000,
+            TRUE ~ CROPDMG
+        )
+    ) %>%
+    # group by event type 
+    group_by(EVTYPE) %>% 
+    # sum of PROP & CROP Damage for each event type
+    summarise(
+    	totalP = sum(PROPDMG), 
+    	totalC = sum(CROPDMG)
+    	)
+```
+ - sort by total Property damage & select top 10
+ - create a bar plot and assign it to `plotProp`
+```{r}
+## by PROP
+Prop <- Eco %>%
+    arrange(-totalP) %>%
+    head(10)
+plotProp <- ggplot(data = Prop) +
+	geom_bar(mapping = aes(x = reorder(EVTYPE, -totalP), y = totalP), 
+	         fill = 'red', stat = 'identity') +
+    labs(title = 'Property Damage - Top 10', 
+         x = 'Event Type',
+         y = 'Property Damage ($)') +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+ - sort by total Crop damage & select top 10
+ - create a bar plot and assign it to `plotCrop`
+```{r}
+## by CROP
+Crop <- Eco %>%
+    arrange(-totalC) %>%
+    head(10)
+plotCrop <- ggplot(data = Crop) +
+	geom_bar(mapping = aes(x = reorder(EVTYPE, -totalC), y = totalC), 
+	         fill = 'blue', stat = 'identity') +
+    labs(title = 'Crop Damage - Top 10', 
+         x = 'Event Type',
+         y = 'Crop Damage ($)') +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+ - show two barplots in one figure using `plot_grid()` (from the cowplot library)
+```{r}
+plot_grid(plotProp, plotCrop, labels='AUTO')
+```
+
+# Results
+### 1. Top 10 events considering 'Fatalities' and 'Injuries'
+```{r}
+print(Fat)
+print(Inj)
+```
+### 2. Top 10 events considering 'Property damage' and 'Crop damage'
+```{r}
+print(Prop)
+print(Crop)
+```
+
+
